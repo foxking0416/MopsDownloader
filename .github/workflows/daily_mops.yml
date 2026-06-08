@@ -1,0 +1,49 @@
+name: Daily MOPS Crawler (Clause 11)
+
+on:
+  schedule:
+    # 每天台北時間 23:30 執行（UTC 15:30），抓今天 + 昨天
+    - cron: '30 15 * * *'
+  workflow_dispatch:
+    inputs:
+      days_back:
+        description: '往回追溯幾天（不含今天）'
+        required: false
+        default: '1'
+      sleep_step2:
+        description: 'step=2 間隔秒數'
+        required: false
+        default: '3.0'
+
+concurrency:
+  group: daily-mops
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run crawler
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PYTHONUNBUFFERED: '1'
+        run: |
+          python daily_mops_to_supabase.py \
+            --days-back ${{ github.event.inputs.days_back || '1' }} \
+            --sleep-step2 ${{ github.event.inputs.sleep_step2 || '3.0' }}
