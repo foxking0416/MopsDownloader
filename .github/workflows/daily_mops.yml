@@ -41,7 +41,7 @@ jobs:
       - name: Run crawler
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           PYTHONUNBUFFERED: '1'
         run: |
           python daily_mops_to_supabase.py \

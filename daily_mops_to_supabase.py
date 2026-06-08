@@ -13,7 +13,7 @@ upsert 至 Supabase 的 StockKeeper.MOPS 表。
 
 環境變數（必要）：
   SUPABASE_URL                Supabase 專案 URL（例：https://xxx.supabase.co）
-  SUPABASE_SERVICE_ROLE_KEY   Supabase service_role key（寫入需要）
+  SUPABASE_KEY   Supabase service_role key（寫入需要）
 
 目標表：StockKeeper.MOPS（unique key: market, co_id, spoke_date, spoke_time, seq_no）
 """
@@ -345,9 +345,9 @@ def candidate_to_row( dict_cand: dict, str_clause: str ) -> dict:
 
 def run( n_days_back: int, f_sleep_step2: float ) -> int:
     str_url = os.environ.get( 'SUPABASE_URL', '' ).strip()
-    str_key = os.environ.get( 'SUPABASE_SERVICE_ROLE_KEY', '' ).strip()
+    str_key = os.environ.get( 'SUPABASE_KEY', '' ).strip()
     if not str_url or not str_key:
-        print( '[ERROR] 缺少環境變數 SUPABASE_URL 或 SUPABASE_SERVICE_ROLE_KEY' )
+        print( '[ERROR] 缺少環境變數 SUPABASE_URL 或 SUPABASE_KEY' )
         return 2
 
     obj_today = datetime.datetime.now( TZ_TAIPEI ).date()

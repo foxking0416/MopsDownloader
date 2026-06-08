@@ -13,8 +13,8 @@
 ## GitHub Actions 設定步驟
 
 1. 推上 GitHub 後，到 repo `Settings → Secrets and variables → Actions`，新增兩個 secret：
-   - `SUPABASE_URL` — 例如 `https://xksjgudosczymdrlismf.supabase.co`
-   - `SUPABASE_SERVICE_ROLE_KEY` — 在 Supabase 專案 `Project Settings → API` 取得 `service_role` key（**勿外流**）
+   - `SUPABASE_URL` — 例如 `https://aaaaaaaaaaaaa.supabase.co`
+   - `SUPABASE_KEY` — 在 Supabase 專案 `Project Settings → API` 取得 `service_role` key（**勿外流**）
 2. 確認 `StockKeeper.MOPS` 已啟用：
    - schema：`StockKeeper`
    - 表：`MOPS`
@@ -28,7 +28,7 @@
 pip install -r requirements.txt
 
 export SUPABASE_URL="https://xxx.supabase.co"
-export SUPABASE_SERVICE_ROLE_KEY="eyJ..."
+export SUPABASE_KEY="eyJ..."
 
 python daily_mops_to_supabase.py                 # 今天 + 昨天
 python daily_mops_to_supabase.py --days-back 3   # 最近 4 天
