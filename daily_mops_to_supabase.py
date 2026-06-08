@@ -20,6 +20,7 @@ upsert 至 Supabase 的 StockKeeper.MOPS 表。
 
 import argparse
 import datetime
+import html
 import io
 import os
 import random
@@ -211,7 +212,18 @@ def fetch_day(
     return []
 
 
-# ── Step=2：取「符合條款」─────────────────────────────────────────────────────
+# ── Step=2：取「符合條款」+「說明」────────────────────────────────────────────
+
+def _strip_html( str_raw: str ) -> str:
+    """把 <br> 轉成換行，移除其他 tag，decode HTML entities，整理空白。"""
+    str_text = re.sub( r'<br\s*/?>', '\n', str_raw, flags=re.IGNORECASE )
+    str_text = re.sub( r'<[^>]+>',   '',   str_text )
+    str_text = html.unescape( str_text )
+    # 去掉每行首尾空白、合併連續空白行
+    list_lines = [ ln.strip() for ln in str_text.splitlines() ]
+    str_text = '\n'.join( ln for ln in list_lines if ln )
+    return str_text.strip()
+
 
 def extract_clause( str_html: str ) -> str:
     obj_m = re.search(
@@ -228,14 +240,35 @@ def extract_clause( str_html: str ) -> str:
     return ''
 
 
-def fetch_clause(
+def extract_description( str_html: str ) -> str:
+    """
+    從 step=2 的 HTML 取「說明」欄位內容（重訊明細，通常含 1.~N. 條列項）。
+    找不到回傳空字串。
+    """
+    # 模式 1：<td>說明</td><td> ... </td>（內容可能含 <br> 與多行）
+    obj_m = re.search(
+        r'>\s*說明\s*</td[^>]*>\s*<td[^>]*>(.*?)</td\s*>',
+        str_html, re.IGNORECASE | re.DOTALL
+    )
+    if obj_m:
+        return _strip_html( obj_m.group(1) )
+
+    # 模式 2：冒號後接文字（舊版格式）
+    obj_m = re.search( r'說明[：:]\s*(.{1,5000}?)(?=<|\n\s*\n)', str_html, re.DOTALL )
+    if obj_m:
+        return _strip_html( obj_m.group(1) )
+
+    return ''
+
+
+def fetch_clause_and_desc(
     obj_session:   requests.Session,
     dict_cand:     dict,
     f_sleep_step2: float,
-) -> Optional[ str ]:
+) -> Optional[ Tuple[str, str] ]:
     """
-    打 step=2 取得單筆公告的「符合條款」。
-    回傳 str_clause；失敗回傳 None。
+    打 step=2 取得單筆公告的「符合條款」+「說明」。
+    回傳 ( str_clause, str_description )；失敗回傳 None。
     """
     str_typek      = DICT_MOPS_CONFIG[ dict_cand['market'] ]
     dict_onclick   = dict_cand.get( 'onclick', {} )
@@ -245,7 +278,7 @@ def fetch_clause(
     str_skey       = dict_onclick.get( 'skey',       '' )
 
     if not all( [ str_spoke_date, str_spoke_time, str_seq_no ] ):
-        return ''
+        return ( '', '' )
 
     payload = {
         'step':       '2',
@@ -282,7 +315,7 @@ def fetch_clause(
             time.sleep( F_SLEEP_SESSION )
             continue
 
-        return extract_clause( str_html )
+        return ( extract_clause( str_html ), extract_description( str_html ) )
 
     print( f'      [ERROR] step=2 重試 {N_RETRY_MAX} 次均失敗（{dict_cand["co_id"]}）' )
     return None
@@ -322,22 +355,23 @@ def upsert_to_supabase(
     return len( list_rows )
 
 
-def candidate_to_row( dict_cand: dict, str_clause: str ) -> dict:
+def candidate_to_row( dict_cand: dict, str_clause: str, str_description: str ) -> dict:
     """將 candidate 轉換為 Supabase row。"""
     onclick = dict_cand.get( 'onclick', {} )
     return {
-        'market':     dict_cand['market'],
-        'year':       dict_cand['year'],
-        'month':      dict_cand['month'],
-        'co_id':      dict_cand['co_id'],
-        'co_name':    dict_cand.get( 'co_name', '' ),
-        'ann_date':   dict_cand.get( 'ann_date', '' ),
-        'subject':    dict_cand.get( 'subject', '' ),
-        'clause':     str_clause,
-        'spoke_date': onclick.get( 'spoke_date', '' ),
-        'spoke_time': onclick.get( 'spoke_time', '' ),
-        'seq_no':     onclick.get( 'seq_no', '' ),
-        'is_ma':      1,
+        'market':      dict_cand['market'],
+        'year':        dict_cand['year'],
+        'month':       dict_cand['month'],
+        'co_id':       dict_cand['co_id'],
+        'co_name':     dict_cand.get( 'co_name', '' ),
+        'ann_date':    dict_cand.get( 'ann_date', '' ),
+        'subject':     dict_cand.get( 'subject', '' ),
+        'clause':      str_clause,
+        'description': str_description,
+        'spoke_date':  onclick.get( 'spoke_date', '' ),
+        'spoke_time':  onclick.get( 'spoke_time', '' ),
+        'seq_no':      onclick.get( 'seq_no', '' ),
+        'is_ma':       1,
     }
 
 
@@ -380,21 +414,26 @@ def run( n_days_back: int, f_sleep_step2: float ) -> int:
                 continue
 
             for dict_cand in list_cands:
-                str_clause = fetch_clause( obj_session, dict_cand, f_sleep_step2 )
+                tuple_result = fetch_clause_and_desc( obj_session, dict_cand, f_sleep_step2 )
 
-                if str_clause is None:
+                if tuple_result is None:
                     # 重試後仍失敗，重建 session 後繼續
                     print( f'  → step=2 多次失敗，重建 Session...' )
                     time.sleep( F_SLEEP_SESSION )
                     obj_session = build_session()
                     continue
 
+                str_clause, str_description = tuple_result
+
                 if STR_TARGET_CLAUSE in str_clause:
-                    list_pending_rows.append( candidate_to_row( dict_cand, str_clause ) )
+                    list_pending_rows.append(
+                        candidate_to_row( dict_cand, str_clause, str_description )
+                    )
                     n_total_ma += 1
                     print( f'    ✓ 第 11 款：{dict_cand["co_id"]} '
                            f'{dict_cand.get("co_name","")} '
-                           f'{dict_cand.get("subject","")[:40]}' )
+                           f'{dict_cand.get("subject","")[:40]}'
+                           f'  (說明 {len(str_description)} 字)' )
 
             # 每個市場/日期完成後就 upsert 一批，避免最後一次失敗丟資料
             if list_pending_rows:
