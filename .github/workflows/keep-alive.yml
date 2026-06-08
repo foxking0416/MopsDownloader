@@ -1,0 +1,37 @@
+name: Keep Alive (防止排程 cron 被 60 天閒置停用)
+
+# GitHub 規定：public repo 連續 60 天沒有 commit 活動，所有 on:schedule 的 workflow
+# 會被自動停用且不通知。此 workflow 定期推一個空 commit 當作 repo 活動，
+# 讓本 repo 內所有排程 cron（daily-price / nasdaq-calendar / yahoo-other-dividend …）
+# 永遠不會超過 60 天閒置。
+#
+# - 60 天閒置是 repo 層級，故只需這一支即可保活全部排程
+# - 用 --allow-empty 空 commit，不更動任何檔案、不污染工作目錄
+# - 以 GITHUB_TOKEN 推送：算 repo 活動可重置 60 天計時，但不會觸發其他 workflow（防遞迴）
+
+on:
+  schedule:
+    - cron: '0 3 1,15 * *'   # 每月 1 號、15 號 03:00 UTC（最長間隔 ~16 天，遠小於 60）
+  workflow_dispatch:          # 也可手動觸發
+
+permissions:
+  contents: write             # 需要推送 commit
+
+concurrency:
+  group: keep-alive
+  cancel-in-progress: false
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Push empty keep-alive commit
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "chore: keep-alive [skip ci]"
+          git push
