@@ -58,6 +58,13 @@ F_SLEEP_SESSION = 60.0
 
 STR_TARGET_CLAUSE = '11'
 
+# 標題（subject）包含以下任一字串就跳過，不進 step=2、不寫入 Supabase
+# 之後要加關鍵字直接在這個 tuple 補即可
+TUPLE_SKIP_SUBJECT_KEYWORDS = (
+    '限制員工權利新股',
+    '減資',
+)
+
 DICT_COL_ALIAS = {
     'date':    ( '發言日期', '公告日期', '日期', 'date' ),
     'co_id':   ( '公司代號', '股票代號', '代號', 'co_id' ),
@@ -414,6 +421,16 @@ def run( n_days_back: int, f_sleep_step2: float ) -> int:
                 continue
 
             for dict_cand in list_cands:
+                str_subject = dict_cand.get( 'subject', '' )
+                str_hit = next(
+                    ( kw for kw in TUPLE_SKIP_SUBJECT_KEYWORDS if kw in str_subject ),
+                    None
+                )
+                if str_hit:
+                    print( f'    ⊘ 跳過（標題含「{str_hit}」）：'
+                           f'{dict_cand["co_id"]} {str_subject[:40]}' )
+                    continue
+
                 tuple_result = fetch_clause_and_desc( obj_session, dict_cand, f_sleep_step2 )
 
                 if tuple_result is None:
