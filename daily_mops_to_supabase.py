@@ -63,6 +63,9 @@ STR_TARGET_CLAUSE = '11'
 TUPLE_SKIP_SUBJECT_KEYWORDS = (
     '限制員工權利新股',
     '減資',
+    '盈餘轉增資',
+    '現金增資認股基準日',
+    '公司債',
 )
 
 DICT_COL_ALIAS = {
